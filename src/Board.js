@@ -10,15 +10,15 @@ export default class Board extends React.Component {
     const clients = this.getClients();
     this.state = {
       clients: {
-        backlog: clients.filter(
-          (client) => !client.status || client.status === 'backlog'
-        ),
-        inProgress: clients.filter(
-          (client) => client.status && client.status === 'in-progress'
-        ),
-        complete: clients.filter(
-          (client) => client.status && client.status === 'complete'
-        ),
+        backlog: clients
+          .filter((client) => !client.status || client.status === 'backlog')
+          .sort((a, b) => a.priority - b.priority),
+        inProgress: clients
+          .filter((client) => client.status && client.status === 'in-progress')
+          .sort((a, b) => a.priority - b.priority),
+        complete: clients
+          .filter((client) => client.status && client.status === 'complete')
+          .sort((a, b) => a.priority - b.priority),
       },
     };
     this.drake = Dragula();
@@ -28,6 +28,12 @@ export default class Board extends React.Component {
       complete: React.createRef(),
     };
   }
+
+  // async getClient() {
+  //   const response = await fetch('http://localhost:3001/api/v1/clients');
+  //   const data = await response.json();
+  //   return data;
+  // }
 
   getClients() {
     return [
@@ -129,6 +135,47 @@ export default class Board extends React.Component {
     }));
   }
 
+  putClient(id, status, sibling) {
+    if (sibling) {
+      const siblingId = sibling.getAttribute('data-id');
+      const clients = [
+        ...this.state.clients.backlog,
+        ...this.state.clients.inProgress,
+        ...this.state.clients.complete,
+      ];
+      const priority = clients.findIndex((c) => c.id === siblingId);
+      fetch(`http://localhost:3001/api/v1/clients/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status,
+          priority,
+        }),
+      });
+    } else {
+      let priority;
+      if (status === 'backlog') {
+        priority = this.state.clients.backlog.length;
+      } else if (status === 'in-progress') {
+        priority = this.state.clients.inProgress.length;
+      } else {
+        priority = this.state.clients.complete.length;
+      }
+      fetch(`http://localhost:3001/api/v1/clients/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status,
+          priority,
+        }),
+      });
+    }
+  }
+
   componentDidMount() {
     document.querySelectorAll('.Swimlane-dragColumn').forEach((container) => {
       this.drake.containers.push(container);
@@ -145,16 +192,19 @@ export default class Board extends React.Component {
             case 0:
               el.classList.add('Card-grey');
               client.status = 'backlog';
+              this.putClient(client.id, 'backlog', sibling);
               break;
 
             case 1:
               el.classList.add('Card-blue');
               client.status = 'in-progress';
+              this.putClient(client.id, 'in-progress', sibling);
               break;
 
             case 2:
               el.classList.add('Card-green');
               client.status = 'complete';
+              this.putClient(client.id, 'complete', sibling);
               break;
 
             default:
@@ -163,6 +213,29 @@ export default class Board extends React.Component {
         }
       });
     });
+
+    fetch('http://localhost:3001/api/v1/clients')
+      .then((response) => {
+        return response.json();
+      })
+      .then((data) => {
+        // update state with API data
+        this.setState({
+          clients: {
+            backlog: data
+              .filter((client) => !client.status || client.status === 'backlog')
+              .sort((a, b) => a.priority - b.priority),
+            inProgress: data
+              .filter(
+                (client) => client.status && client.status === 'in-progress'
+              )
+              .sort((a, b) => a.priority - b.priority),
+            complete: data
+              .filter((client) => client.status && client.status === 'complete')
+              .sort((a, b) => a.priority - b.priority),
+          },
+        });
+      });
   }
   renderSwimlane(name, clients, ref) {
     return <Swimlane name={name} clients={clients} dragulaRef={ref} />;
